@@ -1,11 +1,9 @@
 {
+  "host": "https://2ch.rip/",
   "threads": [
-    "https://2ch.rip/b/res/190485.html"
+    "kekeke"
   ],
   "proxies": [
-    "https://sasai:lolka@192.168.0.32:6590",
-    "https://sasai:lolka@192.168.0.32:6592",
-    "https://sasai:lolka@192.168.0.32:6591",
-    "https://sasai:lolka@192.168.0.32:6595"
+    "kakaka"
   ]
 }

@@ -20,6 +20,7 @@ use data_holders::AppData;
 use data_holders::CaptchaIdResponse;
 
 struct CaptchaApp {
+    host: String,
     captcha_text: String,
     threads: String,
     proxies: String,
@@ -48,6 +49,7 @@ impl CaptchaApp {
         tes_arc: Arc<tokio::sync::Mutex<Option<Tesseract>>>,
     ) -> Self {
         Self {
+            host: app_data.host,
             captcha_text: String::new(),
             threads: app_data.threads.join("\n"),
             proxies: app_data.proxies.join("\n"),
@@ -66,6 +68,7 @@ impl CaptchaApp {
 
     fn save_data(&self) {
         let data = AppData {
+            host: self.host.clone(),
             threads: self.threads.lines().map(|s| s.to_string()).collect(),
             proxies: self.proxies.lines().map(|s| s.to_string()).collect(),
         };
@@ -115,9 +118,6 @@ impl CaptchaApp {
 
         let color_image = egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw());
 
-        // self.texture_original =
-        //     Some(ctx.load_texture("captcha_original", color_image, Default::default()));
-
         *texture = Some(ctx.load_texture("captcha_original", color_image, Default::default()));
     }
 
@@ -155,10 +155,11 @@ impl CaptchaApp {
         let tx_captcha = self.tx_captcha.clone();
         let tx_captcha_denoised = self.tx_captcha_denoised.clone();
         let tes = self.tes_arc.clone();
+        let host = self.host.clone();
 
         tokio::spawn(async move {
             tx_log.send("Receiving captcha...\n".to_string());
-            let result = load_captcha().await;
+            let result = load_captcha(host).await;
 
             if result.is_ok() {
                 tx_log.send("Captcha received!\n".to_string());
@@ -196,20 +197,17 @@ impl CaptchaApp {
     }
 }
 
-async fn load_captcha() -> anyhow::Result<Vec<u8>> {
+async fn load_captcha(host: String) -> anyhow::Result<Vec<u8>> {
     let client = reqwest::Client::new();
 
     let response: CaptchaIdResponse = client
-        .get("https://2ch.rip/cgi/captcha?task=get_id&json=1")
+        .get(&format!("{}/cgi/captcha?task=get_id&json=1", host))
         .send()
         .await?
         .json()
         .await?;
 
-    let image_url = format!(
-        "https://2ch.rip/cgi/captcha?task=get_image&id={}",
-        response.id
-    );
+    let image_url = format!("{}/cgi/captcha?task=get_image&id={}", host, response.id);
 
     let image_bytes = client.get(image_url).send().await?.bytes().await?;
 
@@ -224,6 +222,10 @@ impl eframe::App for CaptchaApp {
             ui.add_space(10.0);
 
             ui.vertical_centered(|ui| ui.label(egui::RichText::new("Autobump").size(25.0)));
+
+            ui.add_space(10.0);
+
+            ui.add(egui::TextEdit::singleline(&mut self.host).desired_width(680.0));
 
             ui.add_space(10.0);
 
@@ -339,6 +341,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (tx_captcha_denoised, rx_captcha_denoised) = mpsc::channel::<Vec<u8>>();
 
     let app_data = load_data();
+
+    println!("app_data: {}", app_data.host);
 
     eframe::run_native(
         "Autobump :3",
