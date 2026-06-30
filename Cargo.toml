@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.102"
+crossbeam-channel = "0.5.15"
 eframe = "0.33"
 egui = "0.33"
 image = "0.25"
