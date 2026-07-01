@@ -11,3 +11,9 @@ pub struct AppData {
 pub struct CaptchaIdResponse {
     pub id: String,
 }
+
+#[derive(Deserialize)]
+pub struct PostIdResponse {
+    pub board: String,
+    pub num: u32,
+}

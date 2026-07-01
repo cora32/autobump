@@ -5,12 +5,14 @@ use rand::Rng;
 use regex::Regex;
 use reqwest::Error;
 use reqwest::StatusCode;
+use reqwest::header::USER_AGENT;
 use reqwest::header::{COOKIE, HeaderMap, HeaderValue, ORIGIN, REFERER};
 use reqwest::multipart;
+use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
-use crate::data_holders::CaptchaIdResponse;
+use crate::data_holders::{CaptchaIdResponse, PostIdResponse};
 
 pub struct AppState {
     pub app_data: AppData,
@@ -78,16 +80,71 @@ impl AppState {
         tokio::spawn(async move {
             let mut captcha_id = String::new();
 
-            if let Ok(lock) = captcha_id_handler.lock() {
-                if let Some(id) = &*lock {
-                    captcha_id = id.clone();
-                }
+            if let Some(id) = captcha_id_handler.lock().unwrap().as_ref() {
+                captcha_id = id.clone();
             }
 
-            let result = Self::send_post(host, thread_link, captcha_text, captcha_id).await;
+            let result =
+                Self::send_post(host.clone(), thread_link.clone(), captcha_text, captcha_id).await;
 
-            if result.is_ok() {}
+            if result.is_ok() {
+                println!("Posted!",);
+                let (board, post_id) = result.unwrap();
+
+                Self::remove_post(host.clone(), thread_link.clone(), board, post_id).await;
+            } else {
+                println!("Failed to post: {}", result.unwrap_err());
+            }
         });
+    }
+
+    async fn remove_post(
+        host: String,
+        link: String,
+        board: String,
+        post_id: u32,
+    ) -> anyhow::Result<()> {
+        let client = reqwest::Client::new();
+
+        let mut params = HashMap::new();
+        params.insert("board", board.to_string());
+        params.insert("delete", post_id.to_string());
+        params.insert("task", "delete".to_string());
+        params.insert("password", "test".to_string());
+
+        let mut headers = HeaderMap::new();
+        if let Ok(referer_value) = HeaderValue::try_from(host.clone()) {
+            headers.insert(ORIGIN, referer_value);
+        };
+
+        if let Ok(referer_value) = HeaderValue::try_from(link.clone()) {
+            headers.insert(REFERER, referer_value);
+        };
+        headers.insert(COOKIE, HeaderValue::from_static("wakabastyle=Photon"));
+        headers.insert(
+            USER_AGENT,
+            HeaderValue::from_static(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0",
+            ),
+        );
+
+        headers.insert("Sec-Fetch-Dest", HeaderValue::from_static("document"));
+        headers.insert("Sec-Fetch-Mode", HeaderValue::from_static("navigate"));
+        headers.insert("Sec-Fetch-Site", HeaderValue::from_static("same-origin"));
+
+        let url = format!("{}cgi/delete", host);
+        let response = client
+            .post(url)
+            .headers(headers)
+            .form(&params)
+            .send()
+            .await?;
+
+        println!("Del Status: {}", response.status());
+        // let body = response.text().await?;
+        // println!("Response: {}", body);
+
+        Ok(())
     }
 
     async fn send_post(
@@ -95,7 +152,7 @@ impl AppState {
         link: String,
         captcha_text: String,
         captcha_id: String,
-    ) -> anyhow::Result<bool> {
+    ) -> anyhow::Result<(String, u32)> {
         let re = Regex::new(r"/([^/]+)/res/(\d+)\.html").unwrap();
 
         if let Some(caps) = re.captures(&link) {
@@ -153,12 +210,15 @@ impl AppState {
                 .await?;
 
             let status = response.status();
+
+            let data: PostIdResponse = response.json().await?;
+
+            let post_id = data.num;
             println!("Status: {}", status.clone());
-            println!("Response Body: {}", response.text().await?);
 
             let is_ok = status.clone() == StatusCode::OK;
             if is_ok {
-                Ok(true)
+                Ok((data.board, post_id))
             } else {
                 Err(anyhow::anyhow!("Failed to post: {}", status.clone()))
             }

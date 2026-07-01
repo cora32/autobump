@@ -234,6 +234,7 @@ impl eframe::App for BumpApp {
             {
                 self.state.bump_post(i, c_text);
                 self.active_index = None;
+                self.captcha_input = String::new();
             }
         });
     }

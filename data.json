@@ -1,7 +1,8 @@
 {
   "host": "https://2ch.rip/",
   "threads": [
-    "https://2ch.rip/b/res/192818.html"
+    "https://2ch.rip/b/res/192818.html",
+    "https://2ch.rip/b/res/190523.html"
   ],
   "proxies": [
     "kakaka"
